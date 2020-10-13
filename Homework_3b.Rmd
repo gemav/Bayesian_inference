@@ -1,0 +1,240 @@
+---
+title: "Homework_3b"
+author: "Gema Vidal_7526"
+date: "5/24/2018"
+output: word_document
+---
+
+
+```{r}
+library(rethinking)
+```
+
+
+Estimate the nymph survival probability
+
+1. We observe that 50 nymphs hatched from a single egg case, while only one nymph survived to adulhood. What is the survival probability? 
+
+To tackle this problem using Bayesian inference, we will assume that each nymph survival is similarly low, since they all come from the same egg case and live in the same habitat. Then, it is reasonable to model the survival of each nymph with a binomial distribution, with some unknown probability of survival p.
+
+Next, we will postulate a Beta(alpha, beta) prior on survival probability p so it will restrict p to be between 0 and 1, and a specific choice of alpha, beta, according to the mean and variance of this distribution, can make this prior to be rather informative in our prior knowledge about the proportion p.
+
+a) Show that for a binomial(1, p) likelihood on the (0/1) data y1, ..., yn and a Beta(alpha, beta) prior on p, the posterior is given by:
+
+
+See hand written handout.
+
+
+
+
+b) Is the Beta(alpha, beta) prior on p conjugate? Explain.
+
+Yes, it is a conjugate prior because the prior (Beta) and posterior distributions have the same family of distributions. Therefore, we can say that Beta prior is conjugate for a Binomial likelihood.
+
+
+
+
+c) Upon prior knowledge that very few nympha can actually survive till adulhood, we assume an informative prior on p: Beta(0.2, 2), such that the prior mean is 0.09, median is 0.12, and sd is 0.16. Using the posterior result of part (a), report the posterior mean and variance of the nymph survival probability p.
+```{r}
+alpha = 0.2
+beta = 2
+prior_mean = 0.09
+prior_median = 0.12
+prior_sd = 0.16
+
+n = 50 # number of observed nymphs
+y = 1  # number of nymphs surviving to adulhood  
+
+
+post_mean = (alpha + y) / ((alpha + y) + (n - y + beta))
+post_var = ((alpha + y) * (n - y + beta)) / ((((alpha + y) + (n - y + beta))^2) * ((alpha + y) + (n - y + beta) + 1))
+
+post_mean
+post_var
+```
+
+
+
+
+d) Perform Monte Carlo of the posterior distribution sampling to collect 10,000 posterior draws of p. Using the posterior samples, estimate and report the posterior mean, median, sd, and 95% highest density posterior interval of p. In a single plot, draw the prior and the posterior density curves of p. To achieve that, it is easiest to use a series of density plots where you identify the posterior mean and HDPI with vertical lines on the plot. Add a vertical line representing the sample proportion of observed survived nymphs from the single egg case. Comment about your Bayesian inference result about p.
+```{r}
+# creating the grid of 10,000 points
+p_grid = seq(from = 0.00001, to = 1, length.out = 1001) # starting the grid with 0.0001 to get rid of the Inf
+prior = dbeta(x = p_grid, 0.2, 2)
+
+# for 1 nyphm surviving to adulhood out of 50 nymphs
+likelihood = dbinom(1, size = 50, prob = p_grid)
+unstand_posterior = likelihood * prior
+# normalizing
+posterior = unstand_posterior / sum(unstand_posterior)
+
+
+set.seed(100)
+post_samples = sample(p_grid, prob = posterior, size = 10000, replace = TRUE)
+prior_samples = sample(p_grid, prob = prior, size = 10000, replace = TRUE)
+
+
+mean(post_samples)
+median(post_samples)
+sd(post_samples)
+HPDI(post_samples, prob = 0.95)
+
+
+# density plots with mean and HPDI
+dens(prior_samples)
+dens(post_samples, add = TRUE, col = 'blue')
+abline(v = mean(post_samples), lty = 2, col = "blue")
+abline(v = HPDI(post_samples), col = "blue")
+```
+
+
+
+
+
+2. Now suppose that one egg case was laid in each of two habitats different only by humidity. Assume the habitats are identical in all other respects. In a dry habitat, out of 50 hatched nymphs only 1 survived. In a wet habitat, out of hathed 80 nymphs only 5 survived.
+
+a) For each egg case in each habitat, we will again assume a binomial distribution for individual nymph survival. Dry habitat success y_1i has a survival probability p_1, whereas the wet habitat y_2i has survival probability p_2. We will also assume that the survival in dry habitat is independent of the survival in wet habitat. All observed data will be represented by y. {y1i, y2i, n1, n2}. Postulate a Beta(alpha_j, beta_j) priors on p_j, j = 1, 2. Derive the joint posterior distribution for (p1, p2), and show that it is a product of two well-known densities. Idenfity these two full conditional distributions: p( p1 | y, p2 ) and p( p2 | y, p1 ).
+
+
+See hand written handout.
+
+
+b) Assume an informative prior on each p1 and p2: Beta (0.2, 2). Use Gibbs sampler to draw samples from the two full conditional distributions. Store your joint samples of (p1, p2). Produce a figure of the joint posterior as a scatterplot of all samples using R command 'pairs'. Produce two density plots of marginal posteriors p1 and p2. Calculate and report the posterior means, standard deviations, and HPDI for p1, p2.
+
+
+```{r}
+gibbs <- function(S, seed){ 
+  # Set up
+  p1 <- 1/50      # starting value dry habitats
+  p2 <- 5/80      # starting value wet habitats
+  set.seed(seed)  # to be able to repeat results exactly
+  
+  x <-  c(p1, p2) # starting values as a parameter set
+  X <- matrix(nrow = S, ncol = 2)    # for saving samples at each iteration
+  X[1, ] <- x # first item of the draws
+
+  for(s in 2:S) {
+    p1 <- rbeta(1, 0.2+1, 2+49) # using the beta priors and provided data for dry habitats
+    p2 <- rbeta(1, 0.2+5, 2+75) # using the beta priors and provided data for wet habitats
+    X[s, ] <- c(p1, p2)
+  }
+  return(X)
+}
+
+
+# Using the function
+B <- 500 # burnin samples that will be removed later
+S <- 10000 # samples
+
+sim1 <- gibbs(S+B, 2371113)
+colnames(sim1) <- c("p1", "p2")
+sim1S <- sim1[-(1:B),]  # remove burnin
+
+
+dens(sim1S[,1])
+mean(sim1S[,1])
+sd(sim1S[,1])
+HPDI(sim1S[,1], prob = 0.95)
+
+dens(sim1S[,2])
+mean(sim1S[,2])
+sd(sim1S[,2])
+HPDI(sim1S[,2], prob = 0.95)
+```
+
+
+
+c) For each iteration of the samples in part (b), compute the posterior difference p2 - p1, and report the posterior mean, standard deviation and HDPI of the difference. Plot the density of the difference and add vertical lines to the plot demonstrating the posterior mean and HDPI of the difference. Estimate the posterior probability that p2 > p1. What is the effect of the humid habitat?
+```{r}
+diffs <- sim1S[, 2] - sim1S[, 1]
+mean(diffs)
+sd(diffs)
+HPDI(diffs, prob = 0.95)
+
+dens(diffs)
+abline(v = mean(diffs), lty = 2)
+abline(v=HPDI(diffs))
+
+sum(diffs > 0) / length(diffs) # prob that p2 > p1. adding the total times it was higher and adding them up
+```
+
+The probability that the survival in wet habitats is higher that in dry habitats (89.76% difference). Humidity increases survival
+
+
+
+
+3. Revisit the problem #2. Now that we have seen the logistic regression in Lecture 13, instead of the Beta prior on p1 and on p2, we choose to model logit p_i as a linear function of a covariate of humidity habitat (X): 1, wet; 0, dry.
+
+In this formulation of the problem, the unknown survival proportions p_1, p_2 are reparameterized via a nonlinear function of alpha, beta. Yet, the problem may again be solved using Bayesian technique
+
+
+a) i) Observe that the likelihood expression for an individual nymph i is proportional to: ...
+Then the likelihood density for the data y_1, ..., y_n | alpha, beta of all n nymphs observed is: ...
+
+Upon examination of this likelihood, provide an argument why in the case of usual logistic regression, for which Xi is a continuous random variable, there is no available conjugate prior choice for independent parameters alpha and beta.
+
+
+There is not known/defined/closed for of distribution for the product of a binomial with a continous distributions.
+
+
+
+
+b) In situations when the posterior distributions are complex, we can still use Gibbs samples. Within each Gibbs sampling step, we can use the Metropolis-Hastings, or better, Hamiltonian Monte Carlo, to accept and reject proposal moves across the joint posterior, already implemented with 'map2stan'.
+
+Assume weakly informative normal priors on the regression parameters alpha ~ Normal(0, 10) and beta ~ Normal(0, 1). Use map2stan to fit the current logistic regression model. Using the posterior samples of alpha and beta to predict the nymph survival proportions. Produce a figure of the joint posterior as a scatterplot of all samples using 'pairs'. Produce two density plots of marginal posteriors p1 and p2. Calculate and report posterior means, standard deviations, and HPDI for p1, p2.
+```{r}
+# Creating the dataframe
+n <- c(seq(from = 1, to = 50), seq(from = 1, to = 80))
+y <- c(1, rep(0, 49), 1, 1, 1, 1, 1, rep(0, 75))
+habitat <- c(rep(0, 50), rep(1, 80)) # 0 for dry, 1 for wet habitats
+d <- data.frame(n, y, habitat)
+
+# fitting the model
+myfit <- map2stan(
+  alist(
+    y ~ dbinom( 1, p ),
+    logit(p) <- a + b*habitat,
+    a ~ dnorm (0, 10),
+    b ~ dnorm (0, 1 )
+  ),
+  data = d, chains = 2, iter = 4000, warmup = 1000 )
+
+stan.samples <- extract.samples(myfit)
+p1 <- logistic(stan.samples$a)
+p2 <- logistic(stan.samples$a + stan.samples$b)
+
+pairs(stan.samples)
+
+dens(p1)
+mean(p1)
+sd(p1)
+HPDI(p1, prob = 0.95)
+
+dens(p2)
+mean(p2)
+sd(p2)
+HPDI(p2, prob = 0.95)
+```
+
+
+
+
+c) Compute the posterior difference p2 - p1, and report posterior mean, standard deviation and HDPI of the difference. Plot the density of the difference and add verical lines to the plot demonstrating the posterior mean and HDPI of the difference. Estimate the posterior probability that p2 > p1. Are your inferences much different from the inference of Problem 2?
+```{r}
+diffs_log <- p2 - p1
+mean(diffs_log)
+sd(diffs_log)
+HPDI(diffs_log, prob = 0.95)
+
+# Plotting
+dens(diffs_log)
+abline(v=mean(diffs_log), lty = 2)
+abline(v=HPDI(diffs_log))
+
+
+# Estimate posterior probability that p2 > p1
+sum(diffs_log >0) / length(diffs_log)
+```
+
+
+

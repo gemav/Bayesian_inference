@@ -1,0 +1,392 @@
+---
+title: "Homework3_code"
+author: "Gema Vidal_7526"
+date: "5/19/2018"
+output: word_document
+---
+
+
+8E1. Which of the following is a requirement of the simple Metropolis algorithm?
+
+(1) The parameters must be discrete
+(2) The likelihood function must be Gaussian
+(3) The proposal distribution must be symmetric
+
+distribution must be symmetric.
+
+
+
+8E2. Gibbs sampling is more efficient than the Metropolis algorithm. How does it achieve this extra efficiency? Are there any limitations to the Gibbs sampling strategy?
+
+Efficiency:
+- Due to adaptive proposals in which the distribution of proposed parameter values adjusts itself intelligently, depending upon the parameter values at the moment. How Gibbs sampling computes these adaptive proposals depends upon using particular combinations of prior distributions and likelihoos known as conjugate pairs that have analytical solutions for the posterior distribution of an individual parameter. These solutions are what allow Gibbs sampling to make smart jumps around the joint posterior distribution of all parameters.
+- REduces randomness by exploiting knowledge of the target distribution.
+
+Limitations:
+- it forces us to use conjugate priors and we may not want to use those. Choosing a prior so that the model fits efficiently isn't really a strong argument from a scientific perspective.
+- as the model becomes more complex and contain hundreds or thousands or ten of thousands of parameters, Gibbs sampling becomes really inefficient and we should use other algorithms.
+
+
+
+8E4. Explain the difference between the effective number of samples, n_eff as calculated by Stan, and the actual number of samples.
+
+Th effecitve number of samples is an estimate of the number of independent samples from the posterior distribution. And compared with Markov chains, Stan chains tend to be less autocorrelated than those produced by other engines, although there is always some autocorrelation. The effective number of samples are those used to estimate the posterior distribution. It does not include the number of samples used for warmup
+
+
+
+
+8M3. Re-estimate one of the Stan models from the chapter, but at different numbers of 'warmup' iterations. Be sure to use the same number of sampling iterations in each case. Compare the n_eff values. How much warmup is enough?
+```{r}
+# Using R code 8.17 to simulate 100 observations from a Gaussian distribution with mean zero and standard deviation 1
+
+set.seed(100)
+y <- rnorm (100, mean = 0, sd = 1)
+
+# And R code 8.19 where we will use weak priors to improve identifiability of parameters.
+# 1000 warmup iterations
+m8.5 <- map2stan(
+  alist(
+    y ~ dnorm (mu, sigma),
+    mu <- a1 + a2,
+    a1 ~ dnorm (0, 10),
+    a2 ~ dnorm (0, 10),
+    sigma ~ dcauchy (0, 1)
+  ),
+  data = list( y = y), start = list(a1 = 0, a2 = 0, sigma = 1),
+  chains = 2, iter = 4000, warmup = 1000)
+
+precis (m8.5)
+
+```
+With 1000 warmup iterations we have 1696 effective samples to estimate parameter a1, 1695 effective samples to estimate parameter a2, and 2249 effective samples to estimate sigma.
+
+
+If we instead use double number of warmup interations, we obtain the following:
+```{r}
+# 2000 warmup iterations
+m8.5b <- map2stan(
+  alist(
+    y ~ dnorm (mu, sigma),
+    mu <- a1 + a2,
+    a1 ~ dnorm (0, 10),
+    a2 ~ dnorm (0, 10),
+    sigma ~ dcauchy (0, 1)
+  ),
+  data = list( y = y), start = list(a1 = 0, a2 = 0, sigma = 1),
+  chains = 2, iter = 4000, warmup = 2000)
+
+precis (m8.5b)
+```
+
+The number of effective samples has decreased subtantially to 957 for both parameters a1 and a2, as well as for sigma, which now the number of effective samples is 1422.
+
+
+The author states that with Stan models, we can devote as much as half of our total samples, the 'iter' value. So let's try and see how much we gain by increasing the number of warmup samples by more than double the number of total samples.
+```{r}
+# 3000 warmup iterations
+m8.5c <- map2stan(
+  alist(
+    y ~ dnorm (mu, sigma),
+    mu <- a1 + a2,
+    a1 ~ dnorm (0, 10),
+    a2 ~ dnorm (0, 10),
+    sigma ~ dcauchy (0, 1)
+  ),
+  data = list( y = y), start = list(a1 = 0, a2 = 0, sigma = 1),
+  chains = 2, iter = 4000, warmup = 3000)
+
+precis (m8.5c)
+```
+
+
+
+
+
+8H3. Sometimes changing a prior for one parameter has unanticipated effects on other parameters. This is because when a parameter is highly correlated with another parameter in the posterior, the prior influences both parameters. Here is an example to work and think through.
+
+Go back to the leg length example in Chapter 5. The code below simulates height and leg lengths for 100 imagined individuals
+```{r}
+N <- 100                         # number of individuals
+height <- rnorm(N, 10, 2)        # sim total height of each
+leg_prop <- runif(N, 0.4, 0.5)   # leg as proportion of height
+leg_left <- leg_prop * height +  # sim left leg as proportion + error
+rnorm( N , 0 , 0.02 )
+leg_right <- leg_prop * height + # sim right leg as proportion + error
+rnorm( N , 0 , 0.02 )
+
+# combine into data frame
+d <- data.frame(height, leg_left, leg_right)
+```
+
+
+And here is the model you fit before, resulting in a highly correlated posterior for the two beta parameters. This time, fit the model using map2stan:
+```{r}
+m5.8s <- map2stan(
+alist(
+height ~ dnorm( mu , sigma ) ,
+mu <- a + bl*leg_left + br*leg_right ,
+a ~ dnorm( 10 , 100 ) ,
+bl ~ dnorm( 2 , 10 ) ,
+br ~ dnorm( 2 , 10 ) ,
+sigma ~ dcauchy( 0 , 1 )
+) ,
+data = d, chains = 4,
+start = list(a = 10, bl = 0, br = 0, sigma = 1) )
+```
+
+
+Compare the posterior distribution produced by the code above to the posterior distribution produced when you change the prior for br so that it is strictly positive:
+```{r}
+m5.8s2 <- map2stan(
+alist(
+height ~ dnorm( mu , sigma ) ,
+mu <- a + bl*leg_left + br*leg_right ,
+a ~ dnorm( 10 , 100 ) ,
+bl ~ dnorm( 2 , 10 ) ,
+br ~ dnorm( 2 , 10 ) & T[0,] ,
+sigma ~ dcauchy( 0 , 1 )
+) ,
+data = d, chains = 4,
+start = list(a = 10, bl = 0, br = 0, sigma = 1) )
+```
+
+
+
+Compare the two posterior distribution for m5.8s and m5.8s2. What has changed in the posterior distribution of both beta parameters? Can you explain the change induced by the change in prior?
+```{r}
+precis(m5.8s)
+```
+
+```{r}
+plot(m5.8s)
+```
+
+```{r}
+pairs(m5.8s)
+```
+
+
+
+```{r}
+precis(m5.8s2)
+```
+
+```{r}
+plot(m5.8s2)
+```
+
+```{r}
+pairs(m5.8s2)
+```
+
+
+
+- When n_eff is much lower than the actual number of iterations (minus warmup) of your chains, it means the chains are inefficient, bt possibly ok. When Rhat is above 1.00, it usually indicates that the chain has not yet converged, and probably you shouldn't trust the samples. Drawing The first model has higher number of effective samples but Rhat is good while the Rhat for the second model is higher than 1.00
+- Trace plots look good for first model but not good for second, where there are highly correlated samples. We can see than values for 'br' are all above 0 (by design)
+- Highly skewed in second model, with perfectly negatively correlated between left and right leg coefficients and the distribution of one mirrors the distribution of the other.
+- Indication of convergence problem for the chains for model m5.8s2, where there are occassionally unusual parameter values sampled.
+
+
+
+8H4. For the two models fit in the previous problem, use DIC or WAIC to compare the effective numbers of parameters for each model. Which model has more effective parameters? Why?
+```{r}
+compare(m5.8s, m5.8s2)
+```
+
+
+```{r}
+compare(m5.8s, m5.8s2, func = DIC)
+```
+
+Both criteria rate the models similarly. Both, WAIC and DIC show m5.8s as having more effective parameters.
+
+
+
+8H6. Modify the Metropolis algorithm code from the chapter to write your own simple MCMC estimator for globe tossing data and model from Chapter 2.
+
+
+See:
+https://theoreticalecology.wordpress.com/2010/09/17/metropolis-hastings-mcmc-in-r/
+
+OR
+https://socialsciences.mcmaster.ca/jfox/.Materials/MCMC-examples.pdf
+https://socialsciences.mcmaster.ca/jfox/.Materials/Ch-8.html
+https://socialsciences.mcmaster.ca/jfox/.Materials/Ch-8.Rmd
+
+
+
+Creating a function
+```{r}
+metropolis <- function(likelihood, prior, proposal, pars0, m=1e5){
+    # likelihood: a function of the parameter vector
+    # prior:      a function of the parameter vector
+    # proposal:   a function of the current value of the parameter 
+    #              vector, returning a proposed parameter vector
+    # pars0:      a vector of initial values of the parameters
+    # m:          number of samples, defaults to 10^5
+    post <- function(pars) likelihood(pars)*prior(pars)
+    pars <- matrix(0, m, length(pars0))
+    accepted <- rejected <- 0
+    pars.current <- pars0
+    for (i in 1:m){
+        pars.proposed <- proposal(pars.current) 
+        a <- post(pars.proposed)/post(pars.current)  # aceptance ratio
+        if (a >= 1 || runif(1) <= a) {
+            pars[i, ] <- pars.proposed
+            pars.current <- pars.proposed
+            accepted <- accepted + 1
+        }
+        else {
+            pars[i, ] <- pars.current
+            rejected <- rejected + 1
+        }
+    }
+    if (length(pars0) == 1) pars <- as.vector(pars)
+    result <- list(samples=pars, accepted=accepted, rejected=rejected, 
+                   thinned=FALSE)
+    class(result) <- "metropolis"
+    result
+}
+
+print.metropolis <- function(x, ...){
+    cat("number of samples: ", 
+        with(x, if (is.matrix(samples)) nrow(samples) 
+             else length(samples)))
+    cat("\nnumber of parameters: ", 
+        with(x, if (is.matrix(samples)) ncol(samples) else 1))
+    if (x$thinned){
+        cat("\nPrior to thinning:")
+    }
+    cat("\nnumber of proposals accepted: ", x$accepted)
+    cat("\nnumber of proposals rejected: ", x$rejected)
+    cat("\npercentage of proposals accepted: ", 
+        with(x, round(100*accepted/(accepted + rejected), 2)), "\n")
+    if (is.matrix(x$samples)){
+        cat("\nestimated posterior medians")
+        print(apply(x$samples, 2, median))
+    }
+    else cat("\nestimated posterior median: ", median(x$samples))
+    invisible(x)
+}
+
+plot.metropolis <- function(x, ...){
+    n.par <- if (is.matrix(x$samples)) ncol(x$samples) else 1
+    if (n.par == 1) acf(x$samples, main="", ...)
+    else{
+        save.mfrow <- par(mfrow =  n2mfrow(n.par))
+        on.exit(options(save.mfrow))
+        for (j in 1:npar){
+            acf(x$samples[, j], main = paste("parameter", j), ...)
+        }
+    }
+}
+
+thin <- function(object, ...){
+    UseMethod("thin")
+}
+
+thin.metropolis <- function(object, by, ...){
+    # by: every by-th sample in object is retained
+    samples <- object$samples
+    object$samples <- if (is.matrix(samples)){
+        samples[seq(1, nrow(samples), by=by), ]
+    }
+    else samples[seq(1, length(samples), by=by)]
+    object$thinned <- TRUE
+    object
+}
+```
+
+
+For the example from Ch. 2, the likelihood function is W ~Bin(n = 9, p) with data w = 6 hits on water, and the prior is p ~ Unif(0, 1). I'll use as a proposal function N(p, 0.1^2):
+```{r}
+L <- function(p) {
+    if (p < 0 || p > 1) 0
+    else dbinom(6, size=9, prob=p)
+}
+prior <- function(p) 1
+proposal <- function(p) rnorm(1, mean=p, sd=0.1)
+```
+
+Then
+```{r}
+(res8H6 <- metropolis(L, prior, proposal, pars0=0.5))
+plot(res8H6)
+```
+
+
+I'll thin the chain by taking every 25th value and then compute the mean, standard deviation, and 5.5 and 94.5 percentiles to compare with the results on p. 42:
+```{r}
+(res8H6.th <- thin(res8H6, 25))
+```
+
+
+```{r}
+mean(res8H6.th$samples)
+sd(res8H6.th$samples)
+quantile(res8H6.th$sample, c(0.055, 0.945))
+```
+
+
+The results are reasonably similar to those on p. 42. The differences are probably due to `map()` using a normal approximation to the posterior. Here's a density estimate of the posterior, which is negatively skewed:
+
+```{r}
+library(car)
+densityPlot(res8H6.th$samples, xlab="p")
+p <- seq(0, 1, length=50)
+lines(p, dbeta(p, 7, 4), col="magenta", lty=2)
+```
+
+
+The true posterior here is Beta(7, 4), shown in magenta on the graph. Here's a QQ plot:
+
+```{r}
+qqPlot(res8H6.th$samples, distribution="beta", shape1=7, shape2=4)
+```
+
+
+
+```{r}
+num_toss <- 1e5              # number of tossess to simulate
+waters <- rep(0, num_toss)   # empty history vector
+current <- 5                 # starting value (number of 'water' observed out of 10 tosses)
+
+for ( i in 1:num_toss ) {
+  # record current number of 'water' observed
+  waters[i] <- current
+  
+  # generate proposal
+  proposal <- current + sample (c(-1, 1), size = 1)
+  # make sure we don't get more than 10 number of 'water'
+  if (proposal < 0) proposal <- 0    # minumum amount of 'water' we can observe
+  if (proposal > 10) proposal <- 10  # maximum number of 'water' we can observe
+  
+  # move? Using Binomial distribution
+  prob_move <- dbinom (proposal, 10, prob = 0.7) / dbinom (current, 10, prob = 0.7)
+  current <- ifelse (runif(1) < prob_move, proposal, current)
+}
+```
+
+
+```{r}
+mean(waters)
+sd(waters)
+```
+
+
+
+```{r}
+hist(waters)
+```
+
+
+```{r}
+qqPlot(waters, distribution="beta", shape1=7, shape2=4)
+```
+
+
+```{r}
+densityPlot(waters, xlab="p")
+p <- seq(0, 1, length=50)
+```
+

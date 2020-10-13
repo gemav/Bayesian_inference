@@ -1,0 +1,173 @@
+---
+title: "Homework_4"
+author: "Gema Vidal_7526"
+date: "5/29/2018"
+output: word_document
+---
+
+```{r}
+library(rethinking)
+```
+
+
+10E1. If an event has probability 0.35, what are the log-odds of this event?
+```{r}
+prob2logit <- function(prob){
+  odds <- prob / (1 - prob)
+  logit <- log(odds)
+  return(logit)
+}
+
+prob2logit(0.35)
+```
+The log-odds of the event are -0.619
+
+
+
+
+10E2. If an event has log-odds 3.2, what is the probability of this event?
+```{r}
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return (prob)
+}
+
+logit2prob(3.2)
+```
+The probability is 0.9608, or 96%
+
+
+
+
+10E3. Suppose that a coefficient in a logistic regression has value 1.7. What does this imply about the proportional change in odds of the outcome?
+```{r}
+logistic(1.7)
+```
+
+The ratio of the probablity an event happens to the probability it does not happen is 0.84, this is, the probability the event does not happen is higher that the probability the event happens.
+
+
+
+
+10M1. As explained in the chapter, binomial data can be organized in aggregated and disaggregated forms, without any impact on inference. But the likelihood of the data does change when the data are converted between the two formats. Can you explain why?
+
+If aggregated, the likelihood is Binomial because it represents the number of 'successes' each row represents. Each 'point' is a bunch of independent trials that happen to share the same predictor values. In aggregated form, the leading coefficient is the multiplicity, the number of ways that the sequence 0/1 outcomes could be reordered, following a Poisson distribution (counting events). This coefficient doesn't change inference, since it isn't a function of the parameters, but it does change the value of the log-likelihood and the deviance.
+
+
+
+
+10H3.The data contained in library(MASS); data(eagles) are recoreds of salmon pirating attempts by Bald Eagles in Washington State. While one eagle feds, sometimes another will swoop in and try to steal the salmon from it. Call the feeding eagle the "victim" and the thief the "pirate". Use the available data to build a binomial GLM of successful pirating attempts.
+
+```{r}
+library("MASS")
+data(eagles)
+d <- eagles
+
+d$V <- ifelse(test = d$V == "L", yes = 1, no = 0)
+d$A <- ifelse(test = d$A == "A", yes = 1, no = 0)
+d$P <- ifelse(test = d$P == "L", yes = 1, no = 0)
+```
+
+
+
+a) Consider the following model and fit the model to the eagles data, using both map and map2stan. Is the quadratic approximation okay?
+```{r}
+# n (data) is the total number of attempts
+# y is the number of successful attempts
+# p indicates whether or not the pirate had large body size
+# v indicates whether or not the victim had large body size
+# a indicates whether or not the pirate was an adult
+
+# quadratic approximation
+myfit_map <- map(
+  alist(
+    y ~ dbinom (n, p),
+    logit(p) <- alpha + beta_p * P + beta_v * V + beta_a * A,
+    alpha ~ dnorm (0, 10),
+    beta_p ~ dnorm (0, 5),
+    beta_v ~ dnorm (0, 5),
+    beta_a ~ dnorm (0, 5)
+  ),
+  data = d)
+
+precis (myfit_map)
+pairs (myfit_map)
+
+
+# map2stan
+myfit_map2stan <- map2stat(
+  alist(
+    y ~ dbinom (n, p),
+    logit(p) <- alpha + beta_p*P + beta_v*V + beta_a*A,
+    alpha ~ dnorm (0, 10),
+    beta_p ~ dnorm (0, 5),
+    beta_v ~ dnorm (0, 5),
+    beta_a ~ dnorm (0, 5)
+  ),
+  data = d, chains = 2, iter = 4000, warmup = 1000 )
+
+# or also,
+myfit_stan <- map2stan(myfit_map, data = d, chains = 2, iter = 4000, warmup = 1000)
+
+precis (myfit_stan)
+pairs (myfit_stan)
+plot(myfit_stan)
+```
+
+
+
+b) Now interpret the estimates. If the quadratic approximation turned out ok, then it's ok to use the map estimates. Otherwise stick to map2stan estimates. Then plot the posterior predictions. Compute and display both (1) the predicted probability of success and its 89% interval for each row (i) in the data, as well as (2) the predicted success count and its 89% interval. What different information does each type of posterior prediction provide?
+```{r}
+logit2prob(4.61)
+logit2prob(1.13)
+logit2prob(-5.01)
+
+logit2prob(-6.62)
+logit2prob(-3.33)
+```
+
+
+```{r}
+p <- link(myfit_stan)
+y <- sim(myfit_stan)
+
+p.mean <- apply(X = p, MARGIN = 2, FUN = mean)
+p.PI <- apply(X = p, MARGIN = 2, FUN = PI)
+y.mean <- apply(X = y, MARGIN = 2, FUN = mean)
+y.PI <- apply(X = y, MARGIN = 2, FUN = PI)
+
+# plot the model predictions for `p` vs. the actual proportion of successes for each case
+d$success.proportion <- d$y / d$n
+plot(d$success.proportion, col=rangi2, ylab="successful proportion", xlab="case", xaxt="n", xlim=c(0.75,8.25) , ylim = c(0, 1), pch=16)
+axis(1, at=1:8, labels=c( "LAL","LAS","LIL","LIS","SAL","SAS","SIL","SIS" ))
+points( 1:8 , p.mean )
+for ( i in 1:8 ) lines( c(i, i), p.PI[,i] )
+
+# plot the model predictions for `y` vs. the actual number of successes for each case
+plot(d$y, col=rangi2, ylab="number of successes successful", xlab="case", xaxt="n", xlim=c(0.75,8.25) , ylim = c(0, 30), pch=16)
+axis(1, at=1:8, labels=c( "LAL","LAS","LIL","LIS","SAL","SAS","SIL","SIS" ))
+points( 1:8 , y.mean )
+for ( i in 1:8 ) lines( c(i, i), y.PI[,i] )
+```
+
+
+
+c) Now try to improve the model. Consider an interaction between the pirate's size and age (immature or adult). Compare this model to the previous one, using WAIC. Interpret.
+```{r}
+myfit_inter_stan <- map2stan(
+  alist(
+    y ~ dbinom (n, p),
+    logit(p) <- alpha + beta_v*V + beta_a*A + beta_p*P + beta_p_a*P*A,
+    alpha ~ dnorm (0, 10),
+    beta_p ~ dnorm (0, 5),
+    beta_v ~ dnorm (0, 5),
+    beta_a ~ dnorm (0, 5),
+    beta_p_a ~ dnorm(0, 5)
+  ),
+  data = d, chains = 2, iter = 4000, warmup = 1000 )
+
+compare (myfit_stan, myfit_inter_stan)
+precis(myfit_inter_stan)
+```
+

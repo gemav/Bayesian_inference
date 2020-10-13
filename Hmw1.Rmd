@@ -1,0 +1,381 @@
+---
+title: "Hwk_1"
+author: "Gema Vidal_7526"
+date: "4/16/2018"
+output: word_document
+---
+
+Installation steps
+```{r}
+#dotR <- file.path(Sys.getenv("HOME"), ".R")
+#if (!file.exists(dotR)) dir.create(dotR)
+#M <- file.path(dotR, "Makevars")
+#if (!file.exists(M)) file.create(M)
+
+#cat("\nCXXFLAGS=-O3 -mtune=native -march=native -Wno-unused-variable -Wno-unused-function  -Wno-macro-redefined", file = M, sep = "\n", append = TRUE)
+
+#cat(readLines(M), sep = "\n")
+
+#fx <- inline::cxxfunction( signature(x = "integer", y = "numeric" ) , 'return ScalarReal( INTEGER(x)[0] * REAL(y)[0] ) ;' )
+#fx( 2L, 5 ) # should be 10
+
+#install.packages("rstan")
+#library(rstan)
+
+#install.packages(c("mvtnorm","loo","coda"),repos="https://cloud.r-project.org/",dependencies=TRUE)
+#options(repos=c(getOption('repos'), rethinking='http://xcelab.net/R'))
+#install.packages('rethinking',type='source')
+```
+
+
+```{r}
+library(rethinking)
+set.seed(100)
+```
+
+
+Chapter 2 – Problems
+--------------------
+
+2E1. Which of the following expressions below correspond to the statement: the probability of rain on Monday?
+
+(2) Pr(rain|Monday)
+(4) Pr(rain, Monday)/Pr(Monday)
+
+
+
+2E3. Which of the following expressions below correspond to the statement: the probability that it is Monday, given that it is raining?
+
+(1) Pr(Monday|rain)
+(4) Pr(Monday|rain) = Prob(Rain|Monday) * Prob(Monday) / Prob (Rain)
+Both expressions (1) and (4) are equivalent, where:
+Prob(Monday|rain) is the posterior probability
+Prob(Rain|Monday) is the likelihood
+Prob(Monday) is the prior probability of Monday
+Prob(Rain) is the prior probability of Rain, and acts as a normalizing constant
+
+
+
+2M4. Suppose you have a deck with only three cards. Each card has two sides, and each side is either black or white. One card has two black sides. The second card has one black and one white side. The third card has two white sides. Now suppose all three cards are placed in a bag and shuffled. Someone reaches into the bag and pulls out a card and places it flat on a table. A black side is shown facing up, but you don’t know the color of the side facing down. Show that the probability that the other side is also black is 2/3. Use the counting method (Section 2 of the chapter) to approach this problem. This means counting up the ways that each card could produce the observed data (a black side facing up on the table).
+
+If we observed one black side up, there are 2 ways of producing that result: picking the Black/Black card and one way if we pick the Black/White card, so in total, 2 of 3 ways (the 3 cards: B/B, B/W, W/W) are consistent with the other side of the card being black. This is, 2/3.
+
+
+
+2M7. Assume again the original card problem, with a single card showing a black side face up. Before looking at the other side, we draw another card from the bag and lay it face up on the table. The face that is shown on the new card is white. Show that the probability that the first card, the one showing a black side, has black on its other side is now 0.75. Use the counting method, if you can. Hint: Treat this like the sequence of globe tosses, counting all the ways to see each observation, for each possible first card.
+
+There are two options for the first card: either we started with B/B, or with B/W.
+If we started with B/B, there are 2 ways this card can produce the observation B (one per each side). Then, the next card can only be either B/W or W/W. There are then 3 ways we can get the sequence B-W (1 way for card B/W and 2 ways for card W/W). 3 * 2 = 6
+
+If we started with B/W instead, there is only 1 way we can get first side Black. For the other two remaining cards, B/B can’t show a white side, but card W/W has 2 ways of producing the White side. 2 * 1 = 2
+Then, there are a total of 8 ways of producing the sequence B – W, with 6 ways with B/B being drawn first. 6/8 = 0.75
+
+
+
+2H1. Suppose there are two species of panda bear. Both are equally common in the wild and live in the same places. They look exactly alike and eat the same food, and there is yet no genetic assay capable of telling them apart. They differ however in their family sizes. Species A gives birth to twins 10% of the time, otherwise birthing a single infant. Species B births twins 20% of the time, otherwise birthing singleton infants. Assume these numbers are known with certainty, from many years of field research. Now suppose you are managing a captive panda breeding program. You have a new female panda of unknown species, and she has just given birth to twins. What is the probability that her next birth will also be twins?
+
+Prob(twin2|twin1) = [ProbA (twin1 AND twin2)  OR ProbB (twin1 AND twin2)]/ Prob(twins)
+ProbA(twin1) AND ProbA(twin2) = 0.5 * 0.1 * 0.1
+ProbB(twin1) AND ProbB(twin2) = 0.5 * 0.2 * 0.2
+
+Prob(twins) = Prob(A) * Prob(twinsA) OR Prob(B) * Prob(twinsB) = 0.5 * 0.1 + 0.5 * 0.2 (assuming there is 50% chance of being species A or B)
+Prob(twin2|twin1) = [(0.5 * 0.1 * 0.1) + (0.5 * 0.2 * 0.2)] / 0.5 * 0.1 + 0.5 * 0.2 = 0.166667
+
+```{r}
+ProbA_twin = 0.5 * 0.1 * 0.1
+ProbB_twin = 0.5 * 0.2 * 0.2
+Prob_twins = (0.5 * 0.1) + (0.5 * 0.2)
+
+Prob_twin2twin1 = (ProbA_twin + ProbB_twin) / Prob_twins
+Prob_twin2twin1
+```
+
+
+
+2H4. A common boast of Bayesian statisticians is that Bayesian inference makes it easy to use all of the data, even if the data are of different types. So suppose now that a veterinarian comes along who has a new genetic test that she claims can identify the species of our mother panda. But the test, like all tests, is imperfect. This is the information you have about the test: 
+• The probability it correctly identifies a species A panda is 0.8. 
+• The probability it correctly identifies a species B panda is 0.65. 
+The vet administers the test to your panda and tells you that the test is positive for species A. First ignore your previous information from the births and compute the posterior probability that your panda is species A. Then redo your calculation, now using the birth data as well.
+Without prior information:
+Assuming 50% of the pandas are A, then
+Prob(A|TestA) = Prob(TestA|A) * Prob(A) / Prob(TestA|A) * Prob(A) + Prob(TestA|B) * Prob(B)
+	= (0.8 * 0.5) / ((0.8 * 0.5) + ( (1 – 0.65)* 0.5)) = 0.6957
+
+
+Using the birth data will change our estimation about how likely our population of A and B are. Change the 0.5 by the estimated percentage.
+With prior information:
+Prob(A|TestA) = Prob(TestA|A) * Prob(A) / Prob(TestA|A) * Prob(A) + Prob(TestA|B) * Prob(B)
+	= (0.8 * 0.36) / ((0.8 * 0.36) + ( (1 – 0.65)* (1 – 0.36)) = 0.5625
+
+```{r}
+# without prior information
+Prob_testAspA = 0.8
+ProbA = 0.5
+ProbB = 0.5
+Prob_testBspB = 0.65
+
+Post_prob = (Prob_testAspA * ProbA) / ((Prob_testAspA * ProbA) + ((1 - Prob_testBspB) * ProbB))
+Post_prob
+
+
+# with prior information
+Prob_testAspA = 0.8
+ProbA = 0.36
+ProbB = (1 - 0.36)
+Prob_testBspB = 0.65
+
+Post_prob = (Prob_testAspA * ProbA) / ((Prob_testAspA * ProbA) + ((1 - Prob_testBspB) * ProbB))
+Post_prob
+```
+
+
+
+Chapter 3 - Problems
+--------------------
+
+Creating the samples before doing the exercises
+```{r}
+# creating the grid of 1,000 points
+p_grid = seq(from = 0, to = 1, length.out = 1000)
+prior = rep (1, 1000)
+
+# for 6 water observations out of 9 tosses
+likelihood = dbinom(6, size = 9, prob = p_grid)
+posterior = likelihood * prior
+
+# normalizing
+posterior = posterior / sum(posterior)
+
+set.seed(100)
+samples = sample(p_grid, prob = posterior, size = 1e4, replace = TRUE)
+```
+
+
+3E3. How much of the posterior prob lies between p = 0.2 and p = 0.8?
+```{r}
+sum(posterior[p_grid > 0.2 & p_grid < 0.8])
+# for when the grid approximation is not that easy, then we can use the follwins instead
+sum(samples > 0.2 & samples <0.8)/1e4
+```
+
+
+3E5. 20% of the posterior prob lies above which value of p?
+```{r}
+quantile(samples, 0.8)
+```
+
+3E6. Which values of p contain 66% of the posterior probability, assuming equal posterior probability both below and above the interval?
+```{r}
+# highest posterior density interval
+HPDI(samples, prob = 0.66)
+```
+
+
+
+3M3. Construct posterior predictive check for this model and data = simulate the distribution of the samples, averaging over the posterior uncertainty in p. What is the probability of observing 8 water in 15 tosses?
+```{r, echo = FALSE}
+# dummy data
+# for each sampled value, a random binomial observation is generated
+ppc = rbinom(1e4, size = 15, prob = samples)
+dens(ppc)
+
+# the prob of observing 8 water in 15 tosses can be summarised as the point estimate. The highest posterior probability, a maximum a posterior (MAP) estimate.
+table(ppc)/1e4
+```
+The probability of observing 8 water in 15 tosses is 0.1135, which appears to be one of the biggest probability of all possible values in this sample.
+
+
+
+3M4. Using the posterior distribution constructed from the new 8/15 data, calculate the probability of observing 6 water in 9 tosses
+```{r}
+ppc2 = rbinom(1e4, size = 9, prob = samples)
+table(ppc2)/1e4
+```
+Observing 6 water in 9 tosses has a probability of 0.2015, which isn't the most likely value based on this dataset.
+
+
+
+3H1. Compute the posterior distribution for the probability of a birth being a boy. Which parameter value maximizes the posterior probability?
+```{r, echo=FALSE}
+# 1 = boy, 0 = girl
+birth1 = c(1,0,0,0,1,1,0,1,0,1,0,0,1,1,0,1,1,0,0,0,1,0,0,0,1,0,0,0,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,0,1,0,0,1,1,0,1,0,0,0,0,0,0,0,1,1,0,1,0,0,1,0,0,0,1,0,0,1,1,1,1,0,1,0,1,1,1,1,1,0,0,1,0,1,1,0,1,0,1,1,1,0,1,1,1,1)
+birth2 = c(0,1,0,1,0,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1,1,1,0,1,0,0,1,1,1,1,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,0,1,1,1,0,0,0,0,0,0,1,0,0,0,1,1,0,0,1,0,0,1,1,0,0,0,1,1,1,0,0,0,0)
+
+birthboys = sum(birth1, birth2)
+p_grid = seq(from = 0, to = 1, length.out = 1000)
+prior = rep(1, 1000)
+likelihood = dbinom(birthboys, size = 200, prob = p_grid)
+unstd_posterior = likelihood * prior
+posterior = unstd_posterior / sum(unstd_posterior)
+
+set.seed(100)
+samples = sample(p_grid, prob = posterior, size = 1e4, replace = TRUE)
+
+plot(p_grid, posterior, type = 'b', xlab = 'probability of birth', ylab = 'posterior probability')
+
+p_grid[which.max(posterior)]
+```
+The parameter value that maximizes the probability is 0.5545546.
+
+
+
+3H3. Use rbinom to simulate 10,000 replicates of 200 births. Compare the distribution of predicted numbers of boys to the actual count in the data. Does it look like the model fits the data well? Does the distribution of predictions include the actual observation as a central, likely outcome?
+```{r, echo=FALSE}
+set.seed(100)
+simulation <- rbinom(1e4, size=200, prob=samples)
+dens(simulation)
+abline(v=111) # actual count in the data
+```
+Observing 111 boys out of 200 births seems to fit well the data. The central observation marked by the vertical line is one of the most likely outcomes.
+
+
+
+3H5. The model assumes that sex of first and second births are independent. To check this assumption, focus on second births that followed female first borns. Compare 10,000 simulated counts of boys to only those second births that followed girls. How does the model look? What is going on in these data?
+```{r, echo=FALSE}
+# number of female first-borns: 49 (all the 0s)
+firstgirls <- 100 - sum(birth1)
+
+# this gathers the corresponding second-borns who followed a female first-born
+boysaftgirls <- birth2[birth1==0] 
+
+simulation4 <- rbinom(1e4, size=firstgirls, prob=samples)
+dens(simulation4)
+abline(v=sum(boysaftgirls))
+# the "sum" function here gives meaning to the "boys after girls" name
+```
+The model doesn't fit the data or there is some violation of the idependence assumption. What we observed (marked by the vertical line) is pretty rare compared with what we expect based on our data.
+
+
+
+Other Problems
+--------------
+
+# 2. Out of 19 one-liter samples from water, only 2 sites contained Giardia cysts. Is there evidence to suggest that the proportion of sites with Giardia exceeds 0.25?
+
+a) Decide on the likelihood for the observed data. Explain your choice
+```{r, echo=FALSE}
+# define the grid
+p_grid = seq(from = 0, to = 1, length.out = 1000)
+likelihood = dbinom(2, size = 19, prob = p_grid)
+dens(likelihood)
+```
+The likelihood is binomial: probability of 'success' from a series of repeated Bernoulli trials.
+
+
+
+b) Decide on the prior distribution. Explain your choice
+```{r}
+# define prior. since we don't have any prior information about the distribution, we want to use a noninformative prior
+## there is something wrong with this prior. It is informative, to begin with
+prior = rep (1, 1000)
+```
+Noninformative because we don't know what to expect: all outcomes are equally likely.
+
+
+
+c) What is your posterior distribution? Use any means necessary to represent this distribution
+```{r, echo=FALSE}
+posterior = likelihood * prior
+# normalizing
+posterior = posterior / sum(posterior)
+
+# sampling from the posterior
+samples = sample(p_grid, prob = posterior, size = 1e4, replace = TRUE)
+dens(samples)
+```
+
+
+
+d) Report the posterior mean, median, mode, standard deviation, and 50% and 95% credible intervals. Also estimate the probability that the proportion of sites with Giardia larger than 0.25, given the observed data.
+```{r}
+# posterior mean
+mean(samples)
+
+# posterior median
+median(samples)
+
+# posterior mode
+chainmode(samples)
+
+# posterior standard deviation
+sd(samples)
+
+# 50% and 95% credible intervals
+PI(samples, prob = 0.5)
+PI(samples, prob = 0.95)
+
+# prob of proportion of sites larger than 0.25 (1 - 0.25 = 0.75) given the data
+sum(samples > 0.25)/1e4
+```
+The probability is 9%
+
+
+
+e) Answer the research question (is there any evidence to suggest that the proportion of sites with Giardia exceeds 0.25?)
+
+Based on the posterior probability distribution, it would be very rare (9% chance). There is no much evidence tha the probability is greater than 0.25
+
+
+
+f) Suppose that previous testing of 50 consecutive years and the expert knowledge revealed the proportion of sites with Giardia is larger than 0.05 but smaller than 0.27. Suppose it is safe to assume now that proportion is never below 0.50 or above 0.27. Update your prior belief, and repeat steps 2b - 2e. What is your conclusion to the research question?
+```{r, echo=FALSE}
+# define prior. since we don't have any prior information about the distribution, we want to use a noninformative prior
+prior <- ifelse(p_grid > 0.05 & p_grid < 0.27, 1, 0)
+
+# posterior prob
+posterior = likelihood * prior
+
+# normalizing
+posterior = posterior / sum(posterior)
+
+# sampling from the posterior
+samples = sample(p_grid, prob = posterior, size = 1e4, replace = TRUE)
+dens(samples)
+
+# posterior mean
+mean(samples)
+
+# posterior median
+median(samples)
+
+# posterior mode
+chainmode(samples)
+
+# posterior standard deviation
+sd(samples)
+
+# 50% and 95% credible intervals
+PI(samples, prob = 0.5)
+PI(samples, prob = 0.95)
+
+# prob of proportion of sites larger than 0.25 (1 - 0.25 = 0.75) given the data
+sum(samples > 0.25)/1e4
+```
+There is no much evidence, is even more unlikely (3%) the proportion exceeds 25%.
+
+
+
+g) Use the posterior draws of proportion from 2f to make a new prediction for the number of sites with Giardia, if next year 100 samples are to be collected. Do you think that this is a reasonable prediction? Do you think the model fits the data well? Propose a posterior predictive check to formally evaluate this.
+```{r, echo=FALSE}
+simulation <- rbinom(1e4, size=100, prob=samples)
+dens(simulation)
+simplehist(simulation)
+
+# if the proportion was going to be the same (# of success out of 100 samples)
+p_value <- mean(simulation >= 10.5)
+p_value
+# p-value 0.65, meaning fits with the observed data
+```
+If we take 100 samples, we would expect 10.5 positives, which falls in the middle of the simulated histogram from our posterior predictive distribution.
+
+
+h) Use the normal approximation to este the research hypotheses. How do the inferences differ form the Bayesian approach? Explain
+```{r}
+# hypothesis testing proportions
+```
+
+
+i) Consider the assumptions for the Bayesian sampling model you applied above. Why might they be violated?
+
+Independent sampling? most likely there is an association between having tested positive to Giardia with future positive results in the future. This can be due, for example, to presence of livestock in an area (more likely to be positive) compared with other areas with no livestock.
+

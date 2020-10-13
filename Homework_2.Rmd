@@ -1,0 +1,293 @@
+---
+title: "Homework_2"
+author: "Gema Vidal_7526"
+date: "4/22/2018"
+output: word_document
+---
+
+
+Chapter 4
+---------
+
+4E5. In the model definition just above, how many parameters are in the posterior distibution?
+
+- alpha prior or intercept, which is distributted as a Gaussian distribution with mean 0 and standard deviation 10. Is it the expected value of x when x_i = 0
+- beta prior, the slope, which is distributed as a Gaussian distribution with mean 0 and standard deviation 1
+- sigma prior, the standard deviation of the mean mu, that is distributed uniformly with mean 0 and standard deviation 10 (this matches the standard deviation of alpha)
+
+
+
+4H1. The weights listed below were recorded in the !Kung census, but heights were not recorded for these individuals. Provide predicted heights and 89% intervals (eiter HPDI or PI) for each of these individuals. That is, fill in the table below using model-based predictions
+
+```{r}
+library(rethinking)
+set.seed(100)
+data(Howell1)
+d <- Howell1
+
+# based on the weights, I'm assuming these are adult individuals, so I select adults only
+d2 <- d[ d$age >= 18 , ]
+
+# fit model
+m1 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + b*weight ,
+        a ~ dnorm( 156 , 100 ) ,
+        b ~ dnorm( 0 , 10 ) ,
+        sigma ~ dunif( 0 , 50 )
+    ) ,
+    data=d2 )
+
+# define sequence of weights to compute predictions for
+# these values will be on the horizontal axis
+weight.seq <- c(46.95, 43.72, 64.78, 32.59, 54.63)
+
+# use link to compute mu
+# for each sample from posterior and for each weight in weight.seq
+mu <- link( m1 , data=data.frame(weight=weight.seq) )
+str(mu)
+
+# use type="n" to hide raw data
+plot( height ~ weight , d2 , type="n" )
+
+# loop over samples and plot each mu value
+for ( i in 1:100 )
+    points( weight.seq , mu[i,] , pch=16 , col=col.alpha(rangi2,0.1) )
+
+# we fed 5 different values for weight. The plot shows at each weight vlaue in 'weight.seq', a pile of computed mu values. Each of these piles is a Gaussian distribution. The amount of uncertainty in my depends upon the value of weight
+
+# Finally, summarize the distribution for each weight value
+# summarize the distribution of mu
+# compute the mean of each column (dimension '2') of the matrix 'mu'
+mu.mean <- apply( mu , 2 , mean )              # the average mu at each weight value
+mu.mean
+mu.HPDI <- apply( mu , 2 , HPDI , prob=0.89 )  # 89% lower and upper bounds for each weight value
+mu.HPDI
+```
+Individual | weight | expected height | 89% interval
+-----------------------------------------------------------
+        1  | 46.95  | 156.3730        | 155.9215 - 156.7698
+-----------------------------------------------------------
+        2  | 43.72  | 153.4591        | 153.0434 - 153.8990
+-----------------------------------------------------------
+        3  | 64.78  | 172.4577        | 171.0373 - 173.7426
+-----------------------------------------------------------
+        4  | 32.59  | 143.4185        | 142.4907 - 144.3510
+-----------------------------------------------------------
+        5  | 54.63  | 163.3012        | 162.6019 - 164.0727  
+-----------------------------------------------------------
+
+
+
+4H2. Select out all the rows in the Howell1 data with ages below 18 years of age (192 rows)
+
+a) Fit a linear regression to these data, using map. Present and interpret the estimates. For every 10 units of increase in weight, how much taller does the model predict a child gets?
+```{r}
+data(Howell1)
+d <- Howell1
+
+# based on the weights, I'm assuming these are adult individuals, so I select adults only
+d2 <- d[ d$age < 18 , ]
+
+# fit model but using a different prior for mean height since these are children
+m2 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + b*weight ,
+        a ~ dnorm( 50 , 100 ) ,
+        b ~ dnorm( 0 , 10 ) ,
+        sigma ~ dunif( 0 , 50 )
+    ) ,
+    data=d2 )
+
+precis( m2 , corr=TRUE )
+```
+The average height in children younger than 18 years old is 58.24 cm with a positive relationship between height and weight. Again, as in adult population, the correlation between height and weight is almost perfectly negatively correlated
+
+
+The first, second, and third row are the quadratic approximation for alpha, beta and sigma, respectively.
+
+Beta: a person 1 kg heavier is expected to be 2.72 cm taller. Similarly, for 10 kg of increase in weight, the child gets 27.2 cm taller. 89% of the posterior probability lies between 2.61 and 2.83. Indicates strong  positive relationship between height and weight, conditional on the model.
+
+Alpha: a child of weight 0 should be 58.24 cm tall.
+
+### Sigma: the width of the distribution of heights around the mean. 95% of plausible heights lie withing 10 cm (2 std deviations) of the mean height, but there is also uncertainty about this, as indicated by the 89% percentile interval.###
+
+Alpha and beta are almost perfectly negatively correlated. sigma independent of a and b but b is highly correlated with a, negatively (increasing slope reduces the intercept, so it makes sense due to the construct of the model).
+
+
+
+b) Plot the raw data, with height on the y-axis and weight on the x-axis. Superimpose the MAP regression line and 89% HPDI for the mean. Also superimpose the 89% HPDI for predicted heights.
+```{r}
+# Simulating heights that embody the uncertainty in the posterior as well as the uncertainty in the Gaussian likelihood
+sim.height <- sim( m2 , data=list(weight=weight.seq) )
+str(sim.height)
+# contains simulated heights, not distributions of plausible average height, mu
+
+# summarizing the simulated heights
+## R code 4.60
+height.PI <- apply( sim.height , 2 , PI , prob=0.89 )
+# Contains 89% posterior prediction interval of observable - according to the model - heights, across the values of weight in 'weight.seq'
+
+## R code 4.61
+# plot raw data
+plot( height ~ weight , d2 , col=col.alpha(rangi2,0.5) )
+
+# draw MAP line
+lines( weight.seq , mu.mean )
+
+# draw HPDI region for line
+shade( mu.HPDI , weight.seq )
+
+# draw PI region for simulated heights
+shade( height.PI , weight.seq )
+
+# The wide shaded region in the figure represents the area within which the model expects to find 89% of actual heights in the population, at each weight.
+# The outline for the wide shaded interval is a little jagged. This is the simulation variance in the tails of the sampled Gaussian values.
+```
+
+
+c) What aspects of the model fit concern you? Describe the assumptions you would change to improve the model - what you hypothesize would be a better model.
+
+- Assumption I would change: height and weght are related by a straight line
+Fit a polynomial resgression (probably second order polynomial would be fine)
+
+
+
+Chapter 5
+---------
+
+5E3. Write down a multiple regression to evaluate the claim: Neither amount of funding nor size or laboratory is by itself a good predictor to time to PhD degree; but together these variables are both positively associated with time to degree. Write down the model definition and indicate which side of zero each slope parameter should be on.
+```{r}
+# time to degree_i = alpha + beta_1 * funding_i + beta_2 * lab_size_i
+
+# If they are positively associated with the outcome of interest (time to degree), then slopes are positive.
+```
+
+
+
+5M4. In the divorce data, States with high numbers of Mormons have much lower divorce rates than the regression models expected. Find a list of LDS population by State and use those numbers as a predictor variable, predictiong divorce rate using marriage rate, median age at marriage, and percent LDS population (possible standardized). You may want to consider transformations of the raw percent LDS variable.
+```{r}
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+
+# standardize predictor
+d$MedianAgeMarriage.s <- (d$MedianAgeMarriage-mean(d$MedianAgeMarriage))/sd(d$MedianAgeMarriage)
+d$Marriage.s <- (d$Marriage - mean(d$Marriage))/sd(d$Marriage)
+# add the LDS population
+
+
+
+# fit model / revise this code
+m5.3 <- map(
+    alist(
+        Divorce ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*Marriage.s + bA*MedianAgeMarriage.s ,
+        a ~ dnorm( 10 , 10 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+    ) ,
+    data = d )
+precis( m5.3 )
+# the posterior mean for marriage rate, bR, is now close to zero, with plenty of probability of both sides of zero. The posterior mean for age at marriage, ba, has actually gotten slightly farther from zero, but is essentially unchanged
+
+## R code 5.5
+plot( precis(m5.3) )
+```
+
+
+
+5H3. Using data(foxes) with data on habitat quality and population density. Consider the avgfood variable (average amount of food available in the territory). Fit two multiple regressions:
+
+1) body weight as an additive function of avgfood and groupsize
+2) body weight as an additive function of avgfood, groupsize, and area.
+
+Compare the results with the previous models in first two exercises. 
+
+a) Is 'avgfood' or 'area' a better predictor of body weight? If you had to choose one or the other to include in a model, which would it be? Support statement with tables or plots.
+b) when both 'avgfood' or 'area' are in the same model, their effects are reduced (closer to zero) and their standard errors are larger than when they are included in separate models? Can you explain this result?
+```{r}
+data(foxes)
+d <- foxes
+str(foxes)
+
+
+# Previous models (5H1, 5H2):
+weight ~ area
+weight ~ groupsize
+
+weight ~ area + groupsize
+
+# Current models to fit
+weight ~ avgfood + groupsize
+weight ~ avgfood + groupsize + area
+```
+
+
+
+Chapter 6
+---------
+
+6E3. Suppose a four-sided die is loaded such that, when tossed and lands on a table, it comes up heads 70% of the time. What is the entropy of this coin?
+```{r}
+
+```
+
+
+6E4. Suppose another four-sided die is loaded such that it never shows '4'. The other three sides show equally often. What is the entropy of this die?
+```{r}
+
+```
+
+
+
+Code for Hard section questions
+```{r}
+## R code 6.31
+library(rethinking)
+data(Howell1)
+d <- Howell1
+d$age <- (d$age - mean(d$age))/sd(d$age)
+set.seed( 1000 )
+i <- sample(1:nrow(d),size=nrow(d)/2)
+d1 <- d[ i , ]
+d2 <- d[ -i , ]
+```
+Use the cases in d1 to fit models and the cases in d2 to evaluate them. The set.seed command just ensures that everyone works with the same randomly shuffled data.. Let h_i and x_i be the height and centered age values, on row i. Fit the following models to the data in d1
+
+
+Fitting the models we have to compare later
+```{r}
+
+```
+
+
+
+6H1. Compare the models above, using wAIC. Compare the model rankings, as well as the WAIC weights.
+```{r}
+
+```
+
+
+6H2. For each model, produce a plot with model averaged meand and 97% confidence interval of the mean, superimposed on the raw data. How do predictions differ across models?
+```{r}
+
+```
+
+
+
+6H3. Now also plot the model averaged predictions, across all models. In what ways do the averaged predictions differ form the predictions of the model with the lowest WAIC value?
+```{r}
+
+```
+
+
+
+Irina's problem:
+```{r}
+
+```
+

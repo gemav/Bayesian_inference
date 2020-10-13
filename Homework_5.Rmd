@@ -1,0 +1,375 @@
+---
+title: "Homework_5"
+author: "Gema Vidal_7526"
+date: "6/4/2018"
+output: word_document
+---
+
+
+12E1. Which of the following priors will produce more shrinkage in the estimates?
+
+a) alpha_tank ~ Normal (0, 1)
+b) alpha_tank ~ Normal (0, 2)
+
+
+Prior a will produce more shrinkage in the estimates because a prior with variance 1 is smaller than variance 2.
+
+
+
+12E2. Make the following model into a multilevel model
+```{r}
+# y_i ~ Binomial(1, p_i)
+#logit(p_i) = alpha_group_i + beta * x_i
+#alpha_group ~ Normal (0, 10)
+#beta ~ Normal (0, 1)
+
+myfit_1 <- map2stan(
+  alist(
+    y_i ~ dbinom(1, p_i),
+    logit(p_i) <- alpha[group] + beta * x_i,
+    alpha[group] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 10),
+    beta ~ dnorm(0, 1)
+  ), data = d)
+
+```
+
+
+
+12E3. Make the following model into a multilevel model
+```{r}
+#y_i ~ Normal(mu_i, sigma)
+#mu_i = alpha_group_i + beta * x_i
+#alpha_group ~ Normal (0, 10)
+#beta ~ Normal (0, 1)
+#sigma ~ HalfCauchy (0, 2)
+
+myfit_2 <- map2stan(
+  alist(
+    y_i ~ dnorm(mu_i, sigma),
+    mu_i <- alpha[group] + beta * x_i,
+    alpha[group] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 2),
+    beta ~ dnorm(0, 1)
+  ), data = d)
+```
+
+
+
+12E5. Write an example mathematical model formula for a Poisson regression with two different kinds of varying intercepts, a cross-classified model.
+
+
+
+
+
+
+12M1. Revisit the Reed frog survival data, data(reedfrogs), and add the 'predation' and 'size' treatment variables to the varying intercepts model. Consider models with either main effect alone, both main effects, as well as a model including both and their interaction. Instead of focusing on inferences about these two predictor variables, focus on the inferred variation across tanks. Explain why it changes as it does across models.
+```{r}
+library(rethinking)
+data(reedfrogs)
+d <- reedfrogs
+str(d)
+
+# make the tank cluster variable
+d$tank <- 1:nrow(d)
+d$predation <- ifelse(test = d$pred == "pred", yes = 1, no = 0)
+d$frogsize <- ifelse(test = d$size == "big", yes = 1, no = 0)
+
+# fitting models
+# predation alone, main effect
+myfit_predation <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- alpha[tank] + beta_predation * predation,
+    alpha[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1),
+    beta_predation ~ dnorm(0, 1)
+  ),
+  data = d)
+
+# size alone, main effect
+myfit_size <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- alpha[tank] + beta_frogsize * frogsize,
+    alpha[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1),
+    beta_frogsize ~ dnorm(0, 1)
+  ),
+  data = d)
+
+# both size and predation as main effects
+myfit_both <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- alpha[tank] + beta_predation * predation + beta_frogsize * frogsize,
+    alpha[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1),
+    beta_frogsize ~ dnorm(0, 1),
+    beta_predation ~ dnorm(0, 1)
+  ),
+  data = d)
+
+
+# interaction
+myfit_interaction <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- alpha[tank] + beta_predation * predation + beta_frogsize * frogsize + beta_pred_size * predation * frogsize,
+    alpha[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1),
+    beta_frogsize ~ dnorm(0, 1),
+    beta_predation ~ dnorm(0, 1),
+    beta_pred_size ~ dnorm(0, 1)
+  ),
+  data = d)
+
+
+precis(myfit_predation)
+precis(myfit_size)
+precis(myfit_both)
+precis(myfit_interaction)
+```
+
+
+
+```{r}
+# posterior predictive check
+# Creating a function
+ppc <- function(model, df) {
+  post <- extract.samples(model)
+
+  # compute median intercept for each tank
+  # also transform to probability with logistic
+  df$propsurv.est <- logistic( apply( X = post$alpha, MARGIN = 2, FUN = median ) )
+
+  # display raw proportions surviving in each tank
+  plot( df$propsurv , ylim=c(0,1) , pch=16 , xaxt="n",
+        xlab = "tank", ylab = "proportion survival", col = rangi2 )
+  axis( 1 , at = c(1, 16, 32, 48), labels = c(1, 16, 32, 48))
+
+  # overlay posterior medians
+  points( df$propsurv.est )
+
+  # mark posterior median probability across tanks
+  abline( h = logistic(median(post$alpha)), lty = 2)
+
+  # draw vertical dividers between tank densities
+  abline( v=16.5 , lwd=0.5 )
+  abline( v=32.5 , lwd=0.5 )
+  text( 8 , 0 , "small tanks" )
+  text( 16+8 , 0 , "medium tanks" )
+  text( 32+8 , 0 , "large tanks" )
+}
+
+# Using the function
+ppc(myfit_predation, d)
+ppc(myfit_size, d)
+ppc(myfit_both, d)
+ppc(myfit_interaction, d)
+
+coeftab(myfit_predation, myfit_size, myfit_both, myfit_interaction)
+```
+
+As we add more predictor variables, the variation amongst tanks decreases. This is because predictor variable, by definition, "explain away" the variance, leaving less to be captured by "sigma" itself.
+
+
+
+
+
+12M2. Compare the models you fit just above, using WAIC. Can you reconcile the differences in WAIC with the posterior distributions of the models?
+```{r}
+compare (myfit_predation, myfit_size, myfit_both, myfit_interaction)
+
+precis(myfit_size)
+precis(myfit_predation)
+precis(myfit_both)
+precis(myfit_interaction)
+```
+
+
+
+
+12M3. Re-estimate the basic Reed frog varying intercept model, but now using a Cauchy distribution in place of the Gaussian distribution for the varying intercepts. That is, fit this model:
+```{r}
+#s_i ~ Binomial (n_i, p_i)
+#logit(p_i) = alpha_tank_i
+#alpha_tank ~ Cauchy(alpha, sigma)
+#alpha ~ Normal(0, 1)
+#sigma ~ HalfCauchy(0, 1)
+
+myfit_cauchy <- map2stan(
+  alist(
+    surv ~ dbinom (density, p),
+    logit(p) <- alpha_tank[tank],
+    alpha_tank[tank] ~ dcauchy(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy (0, 1)
+  ),
+  data = d, iter = 1e4, warmup = 1000, chains = 2)
+```
+
+Compare the posterior means of the intercepts, alpha_tank, to the posterior means produced in the chapter, using the customary Gaussian prior. Can you explain the pattern of differences?
+
+
+```{r}
+myfit_normal <- map2stan(
+  alist(
+    surv ~ dbinom (density, p),
+    logit(p) <- alpha_tank[tank],
+    alpha_tank[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy (0, 1)
+  ),
+  data = d, iter = 1e4, warmup = 1000, chains = 2)
+
+
+# comparing
+coeftab(myfit_cauchy, myfit_normal)
+
+# plotting
+post_normal <- extract.samples(myfit_normal)
+alpha_tank_normal <- apply(X = post_normal$alpha, MARGIN = 2, FUN = mean)
+
+post_cauchy <- extract.samples(myfit_cauchy)
+alpha_tank_cauchy <- apply(X = post_cauchy$alpha, MARGIN = 2, FUN = mean)
+
+plot( alpha_tank_normal , alpha_tank_cauchy , pch=16 , col=rangi2 ,
+      xlab="Gaussian prior" , ylab="Cauchy prior" )
+abline(a=0, b=1, lty=2)
+```
+
+The Cauchy means are bigger in a few cases, as Cauchy priors have the longer tail and therefore more plausible values. While the shrinkage of the model does pull these extreme values (all tadpoles survived in these tanks) in, the Gaussian prior does this more so than the Cauchy.
+
+
+
+
+
+Part 2. Fertility survey in Bangladesh.
+
+1934 women were polled on their use of contraception. Women were from 60 districts, identified by the variable district. Each district contain either urban or rural areas or both (variable urban). The variable c_use is the binary response with a value 1 indicating contraceptive use. Other covariates include mean-centered age and three indicator variables recording number of children.
+
+```{r}
+data(bangladesh)
+d <- bangladesh
+?bangladesh
+str(d)
+head(d)
+
+#d$use.contraception = as.factor(d$use.contraception)
+d$district_ID <- as.integer(as.factor(d$district)) #corrects the gap caused by missing district 54
+
+#d fit the model with map2stan
+names(d) <- c("woman", "district", "use_contraception", "living_children", "age_centered", "urban", "district_ID")
+
+# Creating the dummy variables, with 4 children as reference
+d$child1 <- ifelse(d$living_children == 1, 1, 0)
+d$child2 <- ifelse(d$living_children == 2, 1, 0)
+d$child3 <- ifelse(d$living_children == 3, 1, 0)
+```
+
+
+
+a) Does it make sense to use the district id as a random effect in the model?. If yes, explain how it would be used in the model
+
+Yes, do to variation across districts. Some variation will come from other unmeasured sources and such unmeasured factors create variation in the use of contraception across districts, even when all the predictor variables have the same value.
+
+When used in the model, it can be used allowing varying slopes and varying intercepts (allowing for different baseline contraception use) per each district.
+
+
+
+b) Does it make sense to use the woman id as a random effect in the model? If yes, explain how it would be used in the model.
+
+Not really because there is only one single measurement for each women. There should not be any clustering effect.
+
+
+
+
+c) Use all available covariates to model the probability of the contraception use with a Bayesian logistic regression model amended to have random effects for each district. Write down all terms of the model: likelihood, link, priors. Assume weak regularized priors on the parameters (you are free to choose hyperparameters of the hyperpriors whenever need.)
+
+likelihood:                           c_i ~ Binomial (n_i, p_i)
+unique log-odds for each district i:  logit(p_i) = alpha_district_i + b_ch*living.children + b_a*age.centered + b_u*urban
+regularizing prior:                   alpha_district ~ Normal(a, sigma)
+prior for average district:           a ~ Normal (0, 1)
+prior for std. dev for districts:     sigma ~ HalfCauchy (0, 1)
+prior for coeff. living children:     b_ch ~ Normal (0, 1)
+prior for coeff. age centered:        b_a ~ Normal (0, 1)
+prior for coeff. urban:               b_u ~ Normal (0, 1)
+
+In this model, there are varying intercepts for each district only (fixed slopes for the other covariates).
+
+
+
+d) Study the effects of the number of living children (4 = baseline), age, and urban status using your Bayesian logistic regression model amended to have random effects for each district using map2stan. Use 2-4 chains. If convergence has not been reached, change the simulations settings and re-fit the model again. If the parameter coefficients are not significant, attempt to drop these predictors and compare models by DIC. Report DIC model comparison, if any, the final table of all significant parameter estimates (both levels of the hierarchy), the traceplots of the 1st level parameters of the final fit. Comment about the convergence.
+```{r}
+myfit <- map2stan(
+  alist(
+    use_contraception ~ dbinom (1, p),
+    logit(p) <- alpha_district[district_ID] + b_ch1*child1 + b_ch2*child2 + b_ch3*child3 + b_a*age_centered + b_u*urban,
+    alpha_district[district_ID] ~ dnorm(a, sigma_district),
+    a ~ dnorm(0, 10),
+    sigma_district ~ dcauchy (0, 2),
+    b_ch1 ~ dnorm(0, 1),
+    b_ch2 ~ dnorm(0, 1),
+    b_ch3 ~ dnorm(0, 1),
+    b_a ~ dnorm(0, 1),
+    b_u ~ dnorm(0, 1)
+  ), data = d, control = list(adapt_delta = 0.95), constraints = list(sigma="lower=0"), warmup = 1000, iter = 4000, chains = 2, cores = 2)
+```
+
+
+```{r}
+plot(myfit)
+```
+
+
+e) Prepare the dotchart of the posterior intervals for the 1st level parameters. Do the covariates have significant effect on risk of contraceptive use? Describe the cluster-specific effects of the living with 1, 2, and 3 children, effect on age, and urbanization based on posterior means and PI.
+```{r}
+
+```
+
+
+
+f) Report the posterior density plot, the posterior mean, standard deviation, and the PI of the variance component sigma of the random effects. Based on this result, do you think it is a good idea to use random effects in this model? Explain.
+```{r}
+
+```
+
+
+
+g) Perform predictions for probability of contraceptive use for a population of women, aged from -15 to 20 (centered), living with 4 children in 'common' urban district. Plot predictions vs. age, and shade the prediciton uncertainty.
+```{r}
+  alist(
+    use_contraception ~ dbinom (1, p),
+    logit(p) <- alpha_district[district_ID] + b_ch1*child1 + b_ch2*child2 + b_ch3*child3 + b_a*age_centered + b_u*urban,
+    alpha_district[district_ID] ~ dnorm(a, sigma_district),
+    a ~ dnorm(0, 10),
+    sigma_district ~ dcauchy (0, 2),
+    b_ch1 ~ dnorm(0, 1),
+    b_ch2 ~ dnorm(0, 1),
+    b_ch3 ~ dnorm(0, 1),
+    b_a ~ dnorm(0, 1),
+    b_u ~ dnorm(0, 1)
+  ), data = d, control = list(adapt_delta = 0.95), constraints = list(sigma="lower=0"), warmup = 1000, iter= 4000, chains = 2, cores = 2)
+```
+
+
+
+h) Perform predictions for probability of contraceptive use for a woman, aged from -15 to 20 (centered) living with 4 children in 'new' urban district. Plot predictions vs. age, and shade the prediction uncertainty. Comment on the effect of age on contraception.
+```{r}
+
+```
+
+
+
+i) Perform predictions for probability of contraceptive use for a woman, aged of average age, living with 1 child in 'new' urban district, and another woman living in non-urban district. Plot posterior densities of both predictions on the same figure. Comment on the effect of urbanizations on contraception.
+```{r}
+
+```
+
